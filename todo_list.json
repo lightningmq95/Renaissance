@@ -1,0 +1,47 @@
+[
+  {
+    "task": "Host a pancake breakfast to encourage students to attend school on Fridays.",
+    "deadline": "Next week",
+    "priority": "medium",
+    "timestamp": {
+      "start": 0.29,
+      "end": 0.43
+    }
+  },
+  {
+    "task": "Create and post posters with tips for preventing illness.",
+    "deadline": "Not specified",
+    "priority": "medium",
+    "timestamp": {
+      "start": 0.5,
+      "end": 0.74
+    }
+  },
+  {
+    "task": "Talk to John today",
+    "deadline": null,
+    "priority": "medium",
+    "timestamp": {
+      "start": 1.23,
+      "end": 1.52
+    }
+  },
+  {
+    "task": "Send John to guidance counselor",
+    "deadline": null,
+    "priority": "medium",
+    "timestamp": {
+      "start": 1.0,
+      "end": 1.22
+    }
+  },
+  {
+    "task": "Look for free or low cost childcare resources",
+    "deadline": null,
+    "priority": "medium",
+    "timestamp": {
+      "start": 1.23,
+      "end": 1.52
+    }
+  }
+]
