@@ -16,9 +16,10 @@ from langchain_google_genai import GoogleGenerativeAI
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import UploadFile, File
+from fastapi import UploadFile, File, Form
 import traceback
 import dateparser
+import logging
 
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,6 +44,8 @@ from dotenv import load_dotenv
 load_dotenv()
 aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
 reader = easyocr.Reader(['en'])
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGODB_URI = os.getenv("MONGODB_URI")
@@ -178,6 +181,7 @@ class TodoResponse(BaseModel):
 
 
 # %%
+# Programming the ExtractEvents LLM Model
 class ExtractEvents(dspy.Signature):
     """Extract a list of relevant events, each containing Event type, date, location and participating entities (if any, along with their role in the specific event) information from text, current date and given entities."""
 
@@ -196,6 +200,7 @@ class ExtractEvents(dspy.Signature):
 
 
 # %%
+# Programming the KnowledgeExtraction module
 class KnowledgeExtraction(dspy.Module):
     def __init__(self):
         self.cot2 = dspy.ChainOfThought(ExtractEvents)
@@ -220,7 +225,7 @@ class KnowledgeExtraction(dspy.Module):
         )
         return events
 
-
+# Programming the RAG Module
 class RAG(dspy.Module):
     def __init__(self):
         self.respond = dspy.ChainOfThought("context, question -> response")
@@ -264,7 +269,7 @@ def batch_list(items, batch_size):
 aai.settings.api_key = ASSEMBLYAI_API_KEY
 
 
-# TaskExtractor class (unchanged from provided logic)
+# TaskExtractor class
 class TaskExtractor:
     def __init__(self, gemini_api_key):
         genai.configure(api_key=gemini_api_key)
@@ -686,13 +691,7 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
 
 # %%
 # Initialize modules
@@ -701,6 +700,8 @@ rag = RAG()
 
 
 # %%
+# All Queries
+
 @app.post("/extract-events", response_model=List[Event])
 def extract_events(request: List[TranscriptRequest]):
     try:
@@ -714,66 +715,6 @@ def extract_events(request: List[TranscriptRequest]):
         return event_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-# @app.post("/upload_audio")
-# async def upload_audio(audio: UploadFile = File(...)):
-#     try:
-#         # Create recordings directory if it doesn't exist
-#         os.makedirs("recordings", exist_ok=True)
-
-#         # Generate filename with timestamp
-#         timestamp = time.strftime("%Y%m%d-%H%M%S")
-#         filename = f"meeting_{timestamp}.wav"
-#         filepath = os.path.join("recordings", filename)
-
-#         # Save the uploaded file
-#         with open(filepath, "wb") as buffer:
-#             contents = await audio.read()
-#             buffer.write(contents)
-
-#         # Process with AssemblyAI
-#         config = aai.TranscriptionConfig(speaker_labels=True)
-#         transcription = aai.Transcriber().transcribe(filepath, config=config)
-
-#         diarized_text = ""
-#         segments = []
-#         for utterance in transcription.utterances:
-#             speaker = f"Speaker {utterance.speaker}"
-#             text = utterance.text
-#             diarized_text += f"{speaker}: {text}\n"
-#             segments.append(
-#                 {
-#                     "speaker": speaker,
-#                     "text": text,
-#                     "start": utterance.start,
-#                     "end": utterance.end,
-#                 }
-#             )
-
-#         if not diarized_text.strip():
-#             raise HTTPException(status_code=500, detail="Empty transcript generated")
-
-#         # Generate summary and todos
-#         summary = chains["summary"].invoke({"text": diarized_text}).get("text", "")
-#         todos_output = chains["todo"].invoke({"text": diarized_text})
-
-#         try:
-#             todos = json.loads(todos_output.get("text", ""))
-#         except json.JSONDecodeError as e:
-#             raise HTTPException(status_code=500, detail="Invalid JSON returned by LLM")
-
-#         summary_html = markdown.markdown(summary)
-
-#         return {
-#             "success": True,
-#             "transcript": segments,
-#             "summary": summary_html,
-#             "todos": todos,
-#         }
-
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/upload_audio")
@@ -984,33 +925,10 @@ def get_todos():
         # print(corpus)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/process-audio-tasks")
-def process_audio_tasks(audio_file_path: str):
-    try:
-        extractor = TaskExtractor(GEMINI_API_KEY)
-        aai.settings.api_key = ASSEMBLYAI_API_KEY
-        config = aai.TranscriptionConfig(speaker_labels=True)
-        transcript = aai.Transcriber().transcribe(audio_file_path, config)
-        utterances_info = [
-            {"speaker": u.speaker, "text": u.text, "start": u.start, "end": u.end}
-            for u in transcript.utterances
-        ]
-        tasks = extractor.process_transcript(utterances_info)
-        if save_tasks_to_json(tasks):
-            return {
-                "tasks": tasks,
-                "message": "Tasks successfully saved to todo_list.json",
-            }
-        else:
-            return {"tasks": tasks, "message": "Failed to save tasks to JSON file"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
     
 
 @app.post("/upload-video")
-async def upload_video(mode: int, file: UploadFile = File(...)):
+async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
     try:
         # Save the uploaded file
         file_location = f"videos/{file.filename}"
@@ -1018,7 +936,6 @@ async def upload_video(mode: int, file: UploadFile = File(...)):
             f.write(file.file.read())
         
         # Process the video file as needed
-        # For now, just print a message
         transcript = get_transcript_text(file_location, mode)
         collection = db['transcripts']
         meeting_id = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -1031,7 +948,8 @@ async def upload_video(mode: int, file: UploadFile = File(...)):
                 "end": u['end_minutes']
             } for u in transcript
         ]
-        # print(utterances_info)  
+
+        # Extract events from transcript 
         event_list = []
         for req in transcript:
             response = knowledge_extraction(text=req['text'], speaker=req['speaker'])
@@ -1040,10 +958,10 @@ async def upload_video(mode: int, file: UploadFile = File(...)):
         collection = db['events']
         collection.insert_many(events_dicts)
 
+        # Extract tasks from transcript
         extractor = TaskExtractor(GEMINI_API_KEY)
         tasks_list = extractor.process_transcript(utterances_info)
         collection = db['todos']
-        print("Tasks: ", tasks_list)
         collection.insert_many(tasks_list)
 
 
