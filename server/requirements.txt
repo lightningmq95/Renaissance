@@ -7,6 +7,11 @@ spacy
 assemblyai
 langchain
 google-generativeai
+langchain_google_genai
 markdown
 dateparser
 dspy
+opencv-python
+easyocr
+assemblyai
+moviepy
