@@ -1,0 +1,47 @@
+[
+  {
+    "task": "Try a pancake breakfast to encourage students to come to class on Fridays",
+    "deadline": "2025-01-25",
+    "priority": "high",
+    "timestamp": {
+      "start": 0.29,
+      "end": 0.43
+    }
+  },
+  {
+    "task": "Put up posters with tips for not getting sick",
+    "deadline": "Not specified",
+    "priority": "medium",
+    "timestamp": {
+      "start": 0.5,
+      "end": 0.74
+    }
+  },
+  {
+    "task": "Investigate the situation with John Smith, who has missed seven days of school",
+    "deadline": "Not specified",
+    "priority": "high",
+    "timestamp": {
+      "start": 0.75,
+      "end": 1.0
+    }
+  },
+  {
+    "task": "Talk to John and possibly send him to the guidance counselor after the meeting",
+    "deadline": null,
+    "priority": "high",
+    "timestamp": {
+      "start": 1.23,
+      "end": 1.52
+    }
+  },
+  {
+    "task": "Look for free or low cost childcare resources in the community and share them with John",
+    "deadline": null,
+    "priority": "medium",
+    "timestamp": {
+      "start": 1.23,
+      "end": 1.52
+    }
+  }
+]

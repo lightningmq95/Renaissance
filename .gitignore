@@ -1,2 +1,5 @@
-samples/
+.env
+node_modules
+recordings
+samples/samples/
 .env
