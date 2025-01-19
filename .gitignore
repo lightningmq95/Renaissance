@@ -3,3 +3,4 @@ node_modules
 recordings
 samples/
 .env
+server/__pycachee__
