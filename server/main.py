@@ -877,11 +877,11 @@ async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
         
         # Process the video file as needed
         transcript = get_transcript_text(file_location, mode)
-        print("hello")
+        # print("hello")
         collection = db['transcripts']
         meeting_id = datetime.now().strftime("%Y%m%d-%H%M%S")
         collection.insert_one({"segments": transcript, "meeting_id": meeting_id})
-        print("wagwan")
+        # print("wagwan")
         utterances_info = [
             {
                 "speaker": u['speaker'],
