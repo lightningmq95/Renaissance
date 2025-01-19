@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route } from "react-router-dom"
 import CalendarPage from './pages/calendarPage'
+import QueryPage from './pages/queryPage'
 import Home from './pages/home'
 import { NavBar } from './components/navbar'
 import './App.css'
@@ -16,9 +17,7 @@ function App() {
           <Route path="/" >
             <Route index element={<Home />} />
             <Route path="calendar" element={<CalendarPage />} />
-            {/* <Route path="blogs" element={<Blogs />} />
-            <Route path="contact" element={<Contact />} />
-            <Route path="*" element={<NoPage />} /> */}
+            <Route path='query' element={<QueryPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
