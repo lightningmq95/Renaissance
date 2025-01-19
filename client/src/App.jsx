@@ -4,6 +4,8 @@ import Home from "./pages/home";
 import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
+import CalendarPage from "./pages/calendarPage";
+import { NavBar } from "./components/navbar";
 import RealTime from "./pages/RealTime";
 import Meetings from "./pages/meetings";
 
@@ -13,10 +15,11 @@ function App() {
   return (
     <>
       <BrowserRouter>
+        <NavBar />
         <Routes>
           <Route path="/">
             <Route index element={<Home />} />
-            <Route path="about" element={<Home />} />
+            <Route path="calendar" element={<CalendarPage />} />
             <Route path="realTime" element={<RealTime />} />
             <Route path="meetings" element={<Meetings />} />
             {/* <Route path="blogs" element={<Blogs />} />

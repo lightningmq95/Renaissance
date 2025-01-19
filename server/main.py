@@ -154,6 +154,12 @@ class QueryResponse(BaseModel):
     responses: List[str]
 
 
+class TodoResponse(BaseModel):
+    task: str
+    priority: str
+    deadline: str
+
+
 # %%
 class ExtractEvents(dspy.Signature):
     """Extract a list of relevant events, each containing Event type, date, location and participating entities (if any, along with their role in the specific event) information from text, current date and given entities."""
@@ -495,5 +501,15 @@ def query_rag(request: QueryRequest):
     try:
         responses = rag(question=request.question)
         return responses.response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/get-todos", response_model=List[TodoResponse])
+def get_todos():
+    try:
+        collection = db["todos"]
+        todos = collection.find()
+        return todos
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
