@@ -34,6 +34,7 @@ const RealTime = () => {
       .padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`;
   }, [seconds]);
 
+  //Recording is started in the wav format
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -53,6 +54,8 @@ const RealTime = () => {
     }
   };
 
+  // After the recording is stopped, the file is saved and then sent to the
+  // backend route /upload_audio for further processing
   const stopRecording = async () => {
     setStatus("Processing...");
     setIsRecording(false);
@@ -81,6 +84,7 @@ const RealTime = () => {
     });
   };
 
+  // The results are displayed on the frontend
   const displayResults = (data) => {
     setTranscript(data.transcript);
     setSummary(data.summary);

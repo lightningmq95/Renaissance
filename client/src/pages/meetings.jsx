@@ -1,17 +1,26 @@
 import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm"; // For GitHub-flavored Markdown
+import { useContext } from "react";
+import { TranscriptContext } from "../../context/transcriptContext";
+import { useNavigate } from "react-router-dom";
 
 const Meetings = () => {
-  const [cards, setCards] = useState([]); // To store matched data
-  const [expandedCard, setExpandedCard] = useState(null); // Track expanded card
+  const [cards, setCards] = useState([]);
+  const [expandedCard, setExpandedCard] = useState(null);
+  const { transcript, setTranscript } = useContext(TranscriptContext);
+  const navigate = useNavigate();
 
+  // All of the data from all of the collections are fetched to show the recorded meetings
   useEffect(() => {
     const fetchAndOrganizeData = async () => {
       try {
         // Fetch data from `todos` and `summary` endpoints
         const todosResponse = await fetch("http://localhost:8000/todos");
         const summaryResponse = await fetch("http://localhost:8000/summary");
+        const transcriptResponse = await fetch(
+          "http://localhost:8000/transcript"
+        );
 
         if (!todosResponse.ok || !summaryResponse.ok) {
           throw new Error("Failed to fetch data");
@@ -19,6 +28,9 @@ const Meetings = () => {
 
         const todosData = await todosResponse.json();
         const summaryData = await summaryResponse.json();
+        const transcriptData = await transcriptResponse.json();
+
+        setTranscript(transcriptData);
 
         // console.log(todosData);
         // console.log(summaryData);
@@ -63,6 +75,10 @@ const Meetings = () => {
     setExpandedCard(expandedCard === index ? null : index); // Toggle expanded state
   };
 
+  const handleGenerateMindMap = (card) => {
+    navigate(`/mindmap?created_at=${encodeURIComponent(card.created_at)}`);
+  };
+
   return (
     <div className="bg-gray-100 min-h-screen p-8">
       <h1 className="text-2xl font-bold text-center mb-6">Meetings</h1>
@@ -79,6 +95,12 @@ const Meetings = () => {
               <h3 className="text-lg font-semibold text-gray-800">
                 {new Date(card.created_at).toLocaleString()}
               </h3>
+              <button
+                className="bg-slate-500 rounded-full px-3 py-2 text-white"
+                onClick={() => handleGenerateMindMap(card)}
+              >
+                Generate MindMap
+              </button>
             </div>
 
             {/* Expanded Content */}

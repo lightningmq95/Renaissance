@@ -23,7 +23,6 @@ import logging
 from typing import Optional
 
 
-
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import File, UploadFile
 
@@ -38,14 +37,13 @@ import numpy as np
 import cv2
 import easyocr
 import assemblyai as aai
-from moviepy.video.io.VideoFileClip import VideoFileClip
 from collections import Counter
 from dotenv import load_dotenv
 
 
 load_dotenv()
 aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
-reader = easyocr.Reader(['en'])
+reader = easyocr.Reader(["en"])
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -132,6 +130,7 @@ except Exception as e:
 # %%
 lm = dspy.LM("gemini/gemini-2.0-flash-exp", api_key=GEMINI_API_KEY)
 dspy.configure(lm=lm)
+genai.configure(api_key=GEMINI_API_KEY)
 
 
 # %%
@@ -145,6 +144,7 @@ class EventEntity(BaseModel):
     entity: str
     type: str
     role: str
+
 
 class Event(BaseModel):
     action: str
@@ -223,12 +223,13 @@ class KnowledgeExtraction(dspy.Module):
     def forward(self, text, speaker):
         entities = self.extract_entities(text)
         current_date = datetime.now().strftime("%Y-%m-%d")
-        
+
         events = self.cot2(
             text=text, speaker=speaker, entities=entities, current_date=current_date
         )
         print(events)
         return events
+
 
 # Programming the RAG Module
 class RAG(dspy.Module):
@@ -260,6 +261,7 @@ class RAG(dspy.Module):
         search = dspy.retrievers.Embeddings(embedder=embedder, corpus=corpus, k=5)
         context = search(question).passages
         return self.respond(context=context, question=question)
+
 
 # TaskExtractor class
 class TaskExtractor:
@@ -340,7 +342,9 @@ class TaskExtractor:
         
         Return an empty array [] if no tasks are found.
         Ensure the response is valid JSON.
-        """.format(text=text_batch)
+        """.format(
+            text=text_batch
+        )
         try:
             response = self.model.generate_content(prompt)
             json_str = response.text.strip("```json").strip("```")
@@ -349,12 +353,159 @@ class TaskExtractor:
             print(f"Error: {e}")
             return []
 
+
+def format_todo_list(tasks):
+    """Format tasks into a readable todo list with optional timestamp handling"""
+    if not tasks:
+        return "No tasks found in the transcript."
+
+    formatted_list = []
+
+    # Sort tasks by priority (high -> medium -> low)
+    priority_order = {"high": 0, "medium": 1, "low": 2}
+    sorted_tasks = sorted(
+        tasks, key=lambda x: priority_order.get(x.get("priority", "low"), 3)
+    )
+
+    for task in sorted_tasks:
+        # Build the task string components
+        deadline_str = (
+            f" (Deadline: {task['deadline']})" if task.get("deadline") else ""
+        )
+        priority_str = f"[{task['priority'].upper()}]" if task.get("priority") else ""
+
+        # Only add timestamp and speaker if they exist
+        speaker_str = f"Speaker {task['speaker']}: " if task.get("speaker") else ""
+
+        if (
+            task.get("timestamp_start") is not None
+            and task.get("timestamp_end") is not None
+        ):
+            timestamp_str = (
+                f"[{task['timestamp_start']:.2f} - {task['timestamp_end']:.2f}]"
+            )
+        else:
+            timestamp_str = ""
+
+        todo_item = f"- {speaker_str}{task['task']} {priority_str}{deadline_str} {timestamp_str}".strip()
+        formatted_list.append(todo_item)
+
+    return "\n".join(formatted_list)
+
+
+def process_audio_to_tasks(audio_file_path, aai_api_key, gemini_api_key):
+    """Process audio file to extract tasks with improved error handling"""
+    try:
+        # Set up AssemblyAI
+        aai.settings.api_key = aai_api_key
+
+        # Configure transcription
+        config = aai.TranscriptionConfig(speaker_labels=True)
+
+        print("\n=== Starting Audio Transcription ===")
+        transcript = aai.Transcriber().transcribe(audio_file_path, config)
+
+        print("\n=== Full Transcript Text ===")
+        print(transcript.text)
+
+        print("\n=== Processing Utterances ===")
+        utterances_info = []
+
+        for utterance in transcript.utterances:
+            # Convert timestamps to minutes
+            start_minutes = utterance.start / (1000 * 60)
+            end_minutes = utterance.end / (1000 * 60)
+
+            utterance_data = {
+                "speaker": utterance.speaker,
+                "text": utterance.text,
+                "start": start_minutes,
+                "end": end_minutes,
+            }
+            utterances_info.append(utterance_data)
+
+            print(f"\nUtterance Details:")
+            print(f"Speaker: {utterance.speaker}")
+            print(f"Text: {utterance.text}")
+            print(f"Time: {start_minutes:.2f} - {end_minutes:.2f}")
+
+        if not utterances_info:
+            print("No utterances found in transcript")
+            return []
+
+        # Create formatted transcript
+        formatted_transcript = "\n".join(
+            [
+                f"{u['start']:.2f}\n"
+                f"Speaker {u['speaker']}: {u['text']}\n"
+                f"{u['end']:.2f}\n"
+                for u in utterances_info
+            ]
+        )
+
+        print("\n=== Extracting Tasks ===")
+        extractor = TaskExtractor(gemini_api_key)
+
+        # Try batch processing first
+        print("\nTrying batched processing...")
+        tasks = extractor.process_transcript(utterances_info)
+
+        # If batch processing finds no tasks, try direct processing
+        if not tasks:
+            print("\nBatch processing found no tasks. Trying direct processing...")
+            direct_tasks = extractor.extract_tasks(formatted_transcript)
+
+            # If direct processing found tasks, add timing information
+            if direct_tasks:
+                print("\nDirect processing found tasks. Adding timing information...")
+                tasks = []
+                for task in direct_tasks:
+                    # Find the most relevant utterance for this task
+                    best_match = None
+                    max_overlap = 0
+
+                    for utterance in utterances_info:
+                        task_words = set(task["task"].lower().split())
+                        utterance_words = set(utterance["text"].lower().split())
+                        overlap = len(task_words.intersection(utterance_words))
+
+                        if overlap > max_overlap:
+                            max_overlap = overlap
+                            best_match = utterance
+
+                    if best_match:
+                        task.update(
+                            {
+                                "speaker": best_match["speaker"],
+                                "timestamp_start": best_match["start"],
+                                "timestamp_end": best_match["end"],
+                            }
+                        )
+                        tasks.append(task)
+                    else:
+                        # If no matching utterance found, add task without timing info
+                        tasks.append(task)
+
+        return tasks
+
+    except Exception as e:
+        print(f"\n=== Error in Processing ===")
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print("\nTraceback:")
+        import traceback
+
+        traceback.print_exc()
+        return []
+
+
 def parse_relative_date(relative_date_str):
     """Parse relative date strings like 'today', 'tomorrow', 'next week' into actual dates"""
     parsed_date = dateparser.parse(relative_date_str)
     if parsed_date:
         return parsed_date.strftime("%Y-%m-%d")
     return relative_date_str
+
 
 def transcribe_audio(audio_file_path):
     config = aai.TranscriptionConfig(speaker_labels=True)
@@ -367,11 +518,13 @@ def transcribe_audio(audio_file_path):
         results.append(result)
     return results
 
+
 def process_contour_region(frame, x, y, w, h):
-    roi = frame[y:y+h, x:x+w]
+    roi = frame[y : y + h, x : x + w]
     results = reader.readtext(roi)
-    text = ' '.join([result[1] for result in results])
+    text = " ".join([result[1] for result in results])
     return text.strip() if text.strip() else "Unknown Speaker"
+
 
 def get_transcript_text(video_file_path, mode):
     """
@@ -398,13 +551,19 @@ def get_transcript_text(video_file_path, mode):
                 continue
 
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            
-            if mode == '1':  # Google Meet
-                mask = cv2.inRange(hsv, np.array([100,50,50]), np.array([130,255,255]))
-            else:  # Zoom
-                mask = cv2.inRange(hsv, np.array([40,50,50]), np.array([80,255,255]))
 
-            cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
+            if mode == "1":  # Google Meet
+                mask = cv2.inRange(
+                    hsv, np.array([100, 50, 50]), np.array([130, 255, 255])
+                )
+            else:  # Zoom
+                mask = cv2.inRange(
+                    hsv, np.array([40, 50, 50]), np.array([80, 255, 255])
+                )
+
+            cnts = cv2.findContours(
+                mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )[-2]
 
             if len(cnts) > 0:
                 area = max(cnts, key=cv2.contourArea)
@@ -412,9 +571,16 @@ def get_transcript_text(video_file_path, mode):
                 speaker_name = process_contour_region(frame, x, y, w, h)
                 text_counter[speaker_name] += 1
 
-        most_common_speaker = text_counter.most_common(1)[0][0] if text_counter else "Unknown Speaker"
-        
-        transcript_dict = {"start_minutes": start_time, "end_minutes": end_time, "speaker": most_common_speaker, "text": text}
+        most_common_speaker = (
+            text_counter.most_common(1)[0][0] if text_counter else "Unknown Speaker"
+        )
+
+        transcript_dict = {
+            "start_minutes": start_time,
+            "end_minutes": end_time,
+            "speaker": most_common_speaker,
+            "text": text,
+        }
         transcript_list.append(transcript_dict)
 
     cap.release()
@@ -422,8 +588,54 @@ def get_transcript_text(video_file_path, mode):
     return transcript_list
 
 
+def create_mindmap_markdown(text):
+
+    model = genai.GenerativeModel("gemini-pro")
+
+    max_chars = 30000
+    if len(text) > max_chars:
+        text = text[:max_chars] + "..."
+
+    prompt = """
+    Create a hierarchical markdown mindmap from the following text.
+    Strictly follow these guidelines to ensure accuracy and relevance:
+    1. **Extract only the information explicitly mentioned in the text**. Avoid assumptions or adding unrelated content.
+    2. Organize the content into a clean and logical hierarchy using proper markdown heading syntax:
+    - Use `#` for main topics.
+    - Use `##` for subtopics.
+    - Use `###` for details under subtopics.
+    - Use bullet points (`-`) for finer details or examples.
+    3. Maintain the relationships and structure of ideas as presented in the text.
+    4. Focus on clarity, conciseness, and the logical grouping of concepts.
+
+    ### Example Format:
+    # Main Topic
+    ## Subtopic 1
+    ### Detail 1
+    - Key point 1
+    - Key point 2
+    ### Detail 2
+    ## Subtopic 2
+    ### Detail 3
+    ### Detail 4
+
+    ### Instructions:
+    - Respond **only** with the hierarchical markdown mindmap.
+    - If the text lacks clarity or structure, use a placeholder heading such as `# Miscellaneous` or `# General Notes` for unorganized information.
+    - Ensure every element in the output is derived from the provided text.
+
+    Text to analyze: {text}
+
+    Respond only with the markdown mindmap, no additional explanations or comments.
+    """
+
+    response = model.generate_content(prompt.format(text=text))
+
+    return response.text.strip()
+
 
 # %%
+# CORS Policy is implemented to enable communication with FastAPI and REACT.
 origins = [
     "http://localhost.tiangolo.com",
     "https://localhost.tiangolo.com",
@@ -448,8 +660,13 @@ knowledge_extraction = KnowledgeExtraction()
 rag = RAG()
 
 
+class MindmapRequest(BaseModel):
+    full_text: str
+
+
 # %%
 # All Queries
+
 
 @app.post("/extract-events", response_model=List[Event])
 def extract_events(request: List[TranscriptRequest]):
@@ -464,6 +681,11 @@ def extract_events(request: List[TranscriptRequest]):
         return event_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# This route is used to procees the audio received after recording in real time.
+# The audio is diarized. Meaning that it is segmented according to speakers.
+# TODOS, SUMMARY, and the TRANSCRIPT are stored in the MONGODB cluster.
 
 
 @app.post("/upload_audio")
@@ -627,6 +849,7 @@ async def upload_audio(audio: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
+# Fetching Functions
 @app.get("/todos", response_model=List[dict])
 def get_todos():
     todos = list(todos_collection.find({}, {"_id": 0}))
@@ -645,6 +868,7 @@ def get_summary():
     return summaries
 
 
+# Used for the Q&A functionality
 @app.post("/query-rag", response_model=str)
 def query_rag(request: QueryRequest):
     """
@@ -694,7 +918,13 @@ def get_todos():
         # print(corpus)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
+# @app.post("/generate_mindmap")
+# async def generate_mindmap():
+#     markdown_content = create_mindmap_markdown(request.full_text)
+#     return {"markdown": markdown_content}
+
 
 @app.post("/upload-video")
 async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
@@ -720,31 +950,32 @@ async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
         file_location = f"videos/{file.filename}"
         with open(file_location, "wb") as f:
             f.write(file.file.read())
-        
+
         # Process the video file as needed
         transcript = get_transcript_text(file_location, mode)
         print("hello")
-        collection = db['transcripts']
+        collection = db["transcripts"]
         meeting_id = datetime.now().strftime("%Y%m%d-%H%M%S")
         collection.insert_one({"segments": transcript, "meeting_id": meeting_id})
         print("wagwan")
         utterances_info = [
             {
-                "speaker": u['speaker'],
-                "text": u['text'],
-                "start": u['start_minutes'],
-                "end": u['end_minutes']
-            } for u in transcript
+                "speaker": u["speaker"],
+                "text": u["text"],
+                "start": u["start_minutes"],
+                "end": u["end_minutes"],
+            }
+            for u in transcript
         ]
 
-        # Extract events from transcript 
+        # Extract events from transcript
         event_list = []
         for req in transcript:
-            response = knowledge_extraction(text=req['text'], speaker=req['speaker'])
+            response = knowledge_extraction(text=req["text"], speaker=req["speaker"])
             event_list.extend(response.events)
         events_dicts = [event.dict() for event in event_list]
         print(event_list)
-        collection = db['events']
+        collection = db["events"]
         if events_dicts:
             collection.insert_many(events_dicts)
 
@@ -767,10 +998,17 @@ async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
                 },
             }
             formatted_tasks.append(formatted_task)
-        collection = db['todos']
+        collection = db["todos"]
         if formatted_tasks:
             collection.insert_many(formatted_tasks)
- 
+
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# This route failed. Not to be used.
+@app.post("/generate_mindmap")
+async def generate_mindmap(request: MindmapRequest):
+    markdown_content = create_mindmap_markdown(request.full_text)
+    return {"markdown": markdown_content}
