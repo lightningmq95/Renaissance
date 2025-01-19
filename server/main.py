@@ -38,7 +38,6 @@ import numpy as np
 import cv2
 import easyocr
 import assemblyai as aai
-from moviepy.video.io.VideoFileClip import VideoFileClip
 from collections import Counter
 from dotenv import load_dotenv
 

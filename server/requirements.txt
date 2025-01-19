@@ -14,4 +14,3 @@ dspy
 opencv-python
 easyocr
 assemblyai
-moviepy

@@ -1,6 +1,5 @@
 node_modules
 recordings
 samples/
-.env
 server/__pycachee__
 server/videos/
