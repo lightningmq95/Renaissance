@@ -1,49 +1,49 @@
 [
   {
-    "start_minutes": 0.006666666666666667,
-    "end_minutes": 0.28253333333333336,
+    "start_minutes": 0.01,
+    "end_minutes": 0.28,
     "speaker": "A",
     "text": "Hello, everyone. Thank you guys for coming to our weekly student success meeting. And let's just get started. So I have our list of chronically absent students here. And I've been noticing a troubling trend. A lot of students are skipping on Fridays. Does anyone have any idea what's going on?"
   },
   {
-    "start_minutes": 0.2856,
-    "end_minutes": 0.43196666666666667,
+    "start_minutes": 0.29,
+    "end_minutes": 0.43,
     "speaker": "C",
     "text": "I've heard some of my mentees talking about how it's really hard to get out of bed on Fridays. It might be good if we did something like a pancake breakfast to encourage them to come."
   },
   {
-    "start_minutes": 0.43506666666666666,
-    "end_minutes": 0.4871666666666667,
+    "start_minutes": 0.44,
+    "end_minutes": 0.49,
     "speaker": "A",
     "text": "I think that's a great idea. Let's try that next week."
   },
   {
-    "start_minutes": 0.5001666666666666,
-    "end_minutes": 0.7435,
+    "start_minutes": 0.5,
+    "end_minutes": 0.74,
     "speaker": "D",
     "text": "It might also be because a lot of students have been getting sick now that it's getting colder outside. I've had a number of students come by my office with symptoms like sniffling and coughing. We should put up posters with tips for not getting sick since it's almost flu season. Like, you know, wash your hands after the bathroom, stuff like that."
   },
   {
-    "start_minutes": 0.7455,
-    "end_minutes": 1.0016,
+    "start_minutes": 0.75,
+    "end_minutes": 1.0,
     "speaker": "A",
     "text": "I think that's a good idea and it'll be a good reminder for the teachers as well. So one other thing I wanted to talk about. There's a student I've noticed here, John Smith. He's missed seven days already and it's only November. Does anyone have an idea what's going on with him?"
   },
   {
-    "start_minutes": 1.0041333333333333,
-    "end_minutes": 1.2234666666666667,
+    "start_minutes": 1.0,
+    "end_minutes": 1.22,
     "speaker": "C",
     "text": "I might be able to fill in the gaps there. I talked to John today and he's really stressed out. He's been dealing with helping his parents take care of his younger siblings during the day. It might actually be a good idea if he spoke to the guidance counselor a little bit."
   },
   {
-    "start_minutes": 1.2257333333333333,
-    "end_minutes": 1.5154333333333334,
+    "start_minutes": 1.23,
+    "end_minutes": 1.52,
     "speaker": "B",
     "text": "I can talk to John today if you want to send him to my office after you meet with him. It's a lot to deal with for a middle schooler. Great, thanks. And I can help out with the family's childcare needs. I'll look for some free or low cost resources in the community to share with John and he can share them with his family."
   },
   {
-    "start_minutes": 1.5179666666666667,
-    "end_minutes": 1.6158333333333332,
+    "start_minutes": 1.52,
+    "end_minutes": 1.62,
     "speaker": "A",
     "text": "Great. Well, some really good ideas here today. Thanks for coming. And if no one has anything else, I think we can wrap up."
   }
