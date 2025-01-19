@@ -10,6 +10,7 @@ import { NavBar } from "./components/navbar";
 import RealTime from "./pages/RealTime";
 import Meetings from "./pages/meetings";
 import OnlineMeeting from "./pages/onlineMeeting";
+import MindMap from "./pages/mindMap";
 
 function App() {
   const [count, setCount] = useState(0);
@@ -24,6 +25,7 @@ function App() {
             <Route path="calendar" element={<CalendarPage />} />
             <Route path="realTime" element={<RealTime />} />
             <Route path="meetings" element={<Meetings />} />
+            <Route path="mindmap" element={<MindMap />} />
             <Route path="onlineMeeting" element={<OnlineMeeting />} />
             <Route path="query" element={<QueryPage />} />
           </Route>

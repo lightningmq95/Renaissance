@@ -115,6 +115,7 @@ except Exception as e:
 # %%
 lm = dspy.LM("gemini/gemini-2.0-flash-exp", api_key=GEMINI_API_KEY)
 dspy.configure(lm=lm)
+genai.configure(api_key=GEMINI_API_KEY)
 
 
 # %%
@@ -518,7 +519,54 @@ def save_tasks_to_json(tasks, output_file="todo_list.json"):
         return False
 
 
+def create_mindmap_markdown(text):
+
+    model = genai.GenerativeModel("gemini-pro")
+
+    max_chars = 30000
+    if len(text) > max_chars:
+        text = text[:max_chars] + "..."
+
+    prompt = """
+    Create a hierarchical markdown mindmap from the following text.
+    Strictly follow these guidelines to ensure accuracy and relevance:
+    1. **Extract only the information explicitly mentioned in the text**. Avoid assumptions or adding unrelated content.
+    2. Organize the content into a clean and logical hierarchy using proper markdown heading syntax:
+    - Use `#` for main topics.
+    - Use `##` for subtopics.
+    - Use `###` for details under subtopics.
+    - Use bullet points (`-`) for finer details or examples.
+    3. Maintain the relationships and structure of ideas as presented in the text.
+    4. Focus on clarity, conciseness, and the logical grouping of concepts.
+
+    ### Example Format:
+    # Main Topic
+    ## Subtopic 1
+    ### Detail 1
+    - Key point 1
+    - Key point 2
+    ### Detail 2
+    ## Subtopic 2
+    ### Detail 3
+    ### Detail 4
+
+    ### Instructions:
+    - Respond **only** with the hierarchical markdown mindmap.
+    - If the text lacks clarity or structure, use a placeholder heading such as `# Miscellaneous` or `# General Notes` for unorganized information.
+    - Ensure every element in the output is derived from the provided text.
+
+    Text to analyze: {text}
+
+    Respond only with the markdown mindmap, no additional explanations or comments.
+    """
+
+    response = model.generate_content(prompt.format(text=text))
+
+    return response.text.strip()
+
+
 # %%
+# CORS Policy is implemented to enable communication with FastAPI and REACT.
 origins = [
     "http://localhost.tiangolo.com",
     "https://localhost.tiangolo.com",
@@ -549,6 +597,10 @@ knowledge_extraction = KnowledgeExtraction()
 rag = RAG()
 
 
+class MindmapRequest(BaseModel):
+    full_text: str
+
+
 # %%
 @app.post("/extract-events", response_model=List[Event])
 def extract_events(request: List[TranscriptRequest]):
@@ -565,64 +617,9 @@ def extract_events(request: List[TranscriptRequest]):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# @app.post("/upload_audio")
-# async def upload_audio(audio: UploadFile = File(...)):
-#     try:
-#         # Create recordings directory if it doesn't exist
-#         os.makedirs("recordings", exist_ok=True)
-
-#         # Generate filename with timestamp
-#         timestamp = time.strftime("%Y%m%d-%H%M%S")
-#         filename = f"meeting_{timestamp}.wav"
-#         filepath = os.path.join("recordings", filename)
-
-#         # Save the uploaded file
-#         with open(filepath, "wb") as buffer:
-#             contents = await audio.read()
-#             buffer.write(contents)
-
-#         # Process with AssemblyAI
-#         config = aai.TranscriptionConfig(speaker_labels=True)
-#         transcription = aai.Transcriber().transcribe(filepath, config=config)
-
-#         diarized_text = ""
-#         segments = []
-#         for utterance in transcription.utterances:
-#             speaker = f"Speaker {utterance.speaker}"
-#             text = utterance.text
-#             diarized_text += f"{speaker}: {text}\n"
-#             segments.append(
-#                 {
-#                     "speaker": speaker,
-#                     "text": text,
-#                     "start": utterance.start,
-#                     "end": utterance.end,
-#                 }
-#             )
-
-#         if not diarized_text.strip():
-#             raise HTTPException(status_code=500, detail="Empty transcript generated")
-
-#         # Generate summary and todos
-#         summary = chains["summary"].invoke({"text": diarized_text}).get("text", "")
-#         todos_output = chains["todo"].invoke({"text": diarized_text})
-
-#         try:
-#             todos = json.loads(todos_output.get("text", ""))
-#         except json.JSONDecodeError as e:
-#             raise HTTPException(status_code=500, detail="Invalid JSON returned by LLM")
-
-#         summary_html = markdown.markdown(summary)
-
-#         return {
-#             "success": True,
-#             "transcript": segments,
-#             "summary": summary_html,
-#             "todos": todos,
-#         }
-
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
+# This route is used to procees the audio received after recording in real time.
+# The audio is diarized. Meaning that it is segmented according to speakers.
+# TODOS, SUMMARY, and the TRANSCRIPT are stored in the MONGODB cluster.
 
 
 @app.post("/upload_audio")
@@ -786,6 +783,7 @@ async def upload_audio(audio: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
 
 
+# Fetching Functions
 @app.get("/todos", response_model=List[dict])
 def get_todos():
     todos = list(todos_collection.find({}, {"_id": 0}))
@@ -804,6 +802,7 @@ def get_summary():
     return summaries
 
 
+# Used for the Q&A functionality
 @app.post("/query-rag", response_model=str)
 def query_rag(request: QueryRequest):
     try:
@@ -835,6 +834,12 @@ def get_todos():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# @app.post("/generate_mindmap")
+# async def generate_mindmap():
+#     markdown_content = create_mindmap_markdown(request.full_text)
+#     return {"markdown": markdown_content}
+
+
 @app.post("/process-audio-tasks")
 def process_audio_tasks(audio_file_path: str):
     try:
@@ -856,3 +861,10 @@ def process_audio_tasks(audio_file_path: str):
             return {"tasks": tasks, "message": "Failed to save tasks to JSON file"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# This route failed. Not to be used.
+@app.post("/generate_mindmap")
+async def generate_mindmap(request: MindmapRequest):
+    markdown_content = create_mindmap_markdown(request.full_text)
+    return {"markdown": markdown_content}
