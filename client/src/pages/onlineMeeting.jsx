@@ -4,6 +4,8 @@ const OnlineMeeting = () => {
   const [videoFile, setVideoFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
+  const [meetingType, setMeetingType] = useState(""); // State to store meeting type
+
 
   // Handle file upload
   const handleFileChange = (e) => {
@@ -12,6 +14,15 @@ const OnlineMeeting = () => {
       setVideoFile(file); // Set the selected video file
     } else {
       alert("Please upload a valid video file.");
+    }
+  };
+
+  // Handle meeting type selection
+  const handleMeetingTypeChange = (type) => {
+    if (type === "gmeet") {
+      setMeetingType(1);
+    } else if (type === "zoom") {
+      setMeetingType(2);
     }
   };
 
@@ -24,7 +35,9 @@ const OnlineMeeting = () => {
 
     setUploading(true);
     const formData = new FormData();
-    formData.append("video", videoFile);
+    formData.append("file", videoFile);
+    formData.append("mode", meetingType); // Append meeting type to form data
+
 
     try {
       const response = await fetch("http://localhost:8000/upload-video", {
@@ -68,6 +81,22 @@ const OnlineMeeting = () => {
             onChange={handleFileChange}
             className="hidden"
           />
+
+          {/* Meeting type buttons */}
+          <div className="mt-4">
+            <button
+              onClick={() => handleMeetingTypeChange("gmeet")}
+              className={`py-2 px-4 rounded-lg mr-2 ${meetingType === 1 ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+            >
+              Google Meet
+            </button>
+            <button
+              onClick={() => handleMeetingTypeChange("zoom")}
+              className={`py-2 px-4 rounded-lg ${meetingType === 2 ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+            >
+              Zoom
+            </button>
+          </div>
 
           {/* Upload button */}
           <button

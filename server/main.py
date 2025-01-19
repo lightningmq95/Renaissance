@@ -1,12 +1,10 @@
 # %%
 import time
-from flask import jsonify, request
 import markdown
 import dspy
 import json
 import os
 import spacy
-import warnings
 import assemblyai as aai
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -18,21 +16,36 @@ from langchain_google_genai import GoogleGenerativeAI
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import UploadFile, File
-import logging
+from fastapi import UploadFile, File, Form
 import traceback
 import dateparser
+import logging
+from typing import Optional
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import File, UploadFile
+
 import google.generativeai as genai
 import assemblyai as aai
 import time
-import itertools
 
 load_dotenv()
-warnings.filterwarnings("ignore")
+
+import os
+import numpy as np
+import cv2
+import easyocr
+import assemblyai as aai
+from collections import Counter
+from dotenv import load_dotenv
+
+
+load_dotenv()
+aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
+reader = easyocr.Reader(["en"])
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGODB_URI = os.getenv("MONGODB_URI")
@@ -40,6 +53,8 @@ ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 llm = GoogleGenerativeAI(
     model="gemini-pro", google_api_key=GEMINI_API_KEY, temperature=0
 )
+aai.settings.api_key = ASSEMBLYAI_API_KEY
+
 
 # LLM Chain configurations for refining, todos, and summary
 refining_template = """Refine the following text from a company meeting transcription. 
@@ -119,6 +134,7 @@ genai.configure(api_key=GEMINI_API_KEY)
 
 
 # %%
+# Define Data models to be used by DSPy
 class Entity(BaseModel):
     entity: str
     type: str
@@ -132,10 +148,10 @@ class EventEntity(BaseModel):
 
 class Event(BaseModel):
     action: str
-    type: str
-    date: str
-    location: str
-    entities: List[EventEntity]
+    type: Optional[str] = None
+    date: Optional[str] = None
+    location: Optional[str] = None
+    entities: Optional[List[EventEntity]] = []
 
 
 # %%
@@ -168,6 +184,7 @@ class TodoResponse(BaseModel):
 
 
 # %%
+# Programming the ExtractEvents LLM Model
 class ExtractEvents(dspy.Signature):
     """Extract a list of relevant events, each containing Event type, date, location and participating entities (if any, along with their role in the specific event) information from text, current date and given entities."""
 
@@ -186,6 +203,7 @@ class ExtractEvents(dspy.Signature):
 
 
 # %%
+# Programming the KnowledgeExtraction module
 class KnowledgeExtraction(dspy.Module):
     def __init__(self):
         self.cot2 = dspy.ChainOfThought(ExtractEvents)
@@ -205,12 +223,15 @@ class KnowledgeExtraction(dspy.Module):
     def forward(self, text, speaker):
         entities = self.extract_entities(text)
         current_date = datetime.now().strftime("%Y-%m-%d")
+
         events = self.cot2(
             text=text, speaker=speaker, entities=entities, current_date=current_date
         )
+        print(events)
         return events
 
 
+# Programming the RAG Module
 class RAG(dspy.Module):
     def __init__(self):
         self.respond = dspy.ChainOfThought("context, question -> response")
@@ -242,19 +263,7 @@ class RAG(dspy.Module):
         return self.respond(context=context, question=question)
 
 
-def milliseconds_to_minutes(milliseconds):
-    return milliseconds / (1000 * 60)
-
-
-def batch_list(items, batch_size):
-    for i in range(0, len(items), batch_size):
-        yield items[i : i + batch_size]
-
-
-aai.settings.api_key = ASSEMBLYAI_API_KEY
-
-
-# TaskExtractor class (unchanged from provided logic)
+# TaskExtractor class
 class TaskExtractor:
     def __init__(self, gemini_api_key):
         genai.configure(api_key=gemini_api_key)
@@ -315,10 +324,27 @@ class TaskExtractor:
 
     def extract_tasks(self, text_batch):
         self._rate_limit()
-        prompt = f"""
-        Extract action items and tasks from the following conversation text...
-        {text_batch}
-        """
+        # prompt = f"""
+        # Extract action items and tasks from the following conversation text...
+        # {text_batch}
+        # """
+        prompt = """
+        Extract action items and tasks from the following conversation text. 
+        Look for any statements that imply something needs to be done, assignments given, or commitments made.
+        Include both explicit tasks ("I'll do X") and implicit tasks ("We need to X", "X should be done").
+        
+        Provide results in JSON with these keys:
+        - task: The task description (required)
+        - deadline: The deadline mentioned, or null if not available
+        - priority: Either 'high', 'medium', or 'low' based on urgency words and context
+        
+        Text: {text}
+        
+        Return an empty array [] if no tasks are found.
+        Ensure the response is valid JSON.
+        """.format(
+            text=text_batch
+        )
         try:
             response = self.model.generate_content(prompt)
             json_str = response.text.strip("```json").strip("```")
@@ -481,42 +507,85 @@ def parse_relative_date(relative_date_str):
     return relative_date_str
 
 
-def save_tasks_to_json(tasks, output_file="todo_list.json"):
+def transcribe_audio(audio_file_path):
+    config = aai.TranscriptionConfig(speaker_labels=True)
+    transcript = aai.Transcriber().transcribe(audio_file_path, config)
+    results = []
+    for utterance in transcript.utterances:
+        start = utterance.start / 1000
+        end = utterance.end / 1000
+        result = (start, end, utterance.speaker, utterance.text)
+        results.append(result)
+    return results
+
+
+def process_contour_region(frame, x, y, w, h):
+    roi = frame[y : y + h, x : x + w]
+    results = reader.readtext(roi)
+    text = " ".join([result[1] for result in results])
+    return text.strip() if text.strip() else "Unknown Speaker"
+
+
+def get_transcript_text(video_file_path, mode):
     """
-    Save tasks to a JSON file with standardized format
+    Process video and return transcript with speaker identification
     Args:
-        tasks: List of task dictionaries
-        output_file: Path to output JSON file
+        video_path (str): Path to video file
+        meeting_type (str): '1' for Google Meet, '2' for Zoom
+    Returns:
+        list: List of dicts with speaker and transcript
     """
-    if not tasks:
-        return False
+    cap = cv2.VideoCapture(video_file_path)
+    transcription_results = transcribe_audio(video_file_path)
+    transcript_list = []
 
-    # Standardize the task format for JSON output
-    formatted_tasks = []
-    for task in tasks:
-        deadline = task.get("deadline", None)
-        if deadline:
-            deadline = parse_relative_date(deadline)
+    for start_time, end_time, speaker, text in transcription_results:
+        text_counter = Counter()
+        duration = end_time - start_time
+        analysis_end = start_time + min(duration, 10)
 
-        formatted_task = {
-            "task": task.get("task", ""),
-            "deadline": deadline,
-            "priority": task.get("priority", "low"),
-            "timestamp": {
-                "start": round(task.get("timestamp_start", 0), 2),
-                "end": round(task.get("timestamp_end", 0), 2),
-            },
+        for t in np.arange(start_time, analysis_end, 0.5):
+            cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+            if mode == "1":  # Google Meet
+                mask = cv2.inRange(
+                    hsv, np.array([100, 50, 50]), np.array([130, 255, 255])
+                )
+            else:  # Zoom
+                mask = cv2.inRange(
+                    hsv, np.array([40, 50, 50]), np.array([80, 255, 255])
+                )
+
+            cnts = cv2.findContours(
+                mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )[-2]
+
+            if len(cnts) > 0:
+                area = max(cnts, key=cv2.contourArea)
+                x, y, w, h = cv2.boundingRect(area)
+                speaker_name = process_contour_region(frame, x, y, w, h)
+                text_counter[speaker_name] += 1
+
+        most_common_speaker = (
+            text_counter.most_common(1)[0][0] if text_counter else "Unknown Speaker"
+        )
+
+        transcript_dict = {
+            "start_minutes": start_time,
+            "end_minutes": end_time,
+            "speaker": most_common_speaker,
+            "text": text,
         }
-        formatted_tasks.append(formatted_task)
+        transcript_list.append(transcript_dict)
 
-    # Save to JSON file
-    try:
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(formatted_tasks, f, indent=2, ensure_ascii=False)
-        return True
-    except Exception as e:
-        print(f"Error saving JSON file: {e}")
-        return False
+    cap.release()
+    cv2.destroyAllWindows()
+    return transcript_list
 
 
 def create_mindmap_markdown(text):
@@ -583,13 +652,7 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
 )
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
 
 # %%
 # Initialize modules
@@ -602,6 +665,9 @@ class MindmapRequest(BaseModel):
 
 
 # %%
+# All Queries
+
+
 @app.post("/extract-events", response_model=List[Event])
 def extract_events(request: List[TranscriptRequest]):
     try:
@@ -805,6 +871,15 @@ def get_summary():
 # Used for the Q&A functionality
 @app.post("/query-rag", response_model=str)
 def query_rag(request: QueryRequest):
+    """
+    Endpoint to query the RAG model with a question.
+
+    Args:
+        request (QueryRequest): The request containing the question.
+
+    Returns:
+        str: The response from the RAG model.
+    """
     try:
         responses = rag(question=request.question)
         return responses.response
@@ -814,6 +889,17 @@ def query_rag(request: QueryRequest):
 
 @app.get("/get-todos", response_model=List[TodoResponse])
 def get_todos():
+    """
+    Endpoint to upload a video file, process it to extract transcript, events, and tasks,
+    and save the results to the MongoDB database.
+
+    Args:
+        mode (int): The mode of the meeting (e.g., 1 for Google Meet, 2 for Zoom).
+        file (UploadFile): The uploaded video file.
+
+    Returns:
+        JSON response with the status of the operation.
+    """
     try:
         collection = db["todos"]
         todos = collection.find({"deadline": {"$exists": True, "$ne": None}})
@@ -840,26 +926,84 @@ def get_todos():
 #     return {"markdown": markdown_content}
 
 
-@app.post("/process-audio-tasks")
-def process_audio_tasks(audio_file_path: str):
+@app.post("/upload-video")
+async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
+    """
+    Endpoint to upload a video file, process it to extract transcript, events, and tasks,
+    and save the results to the MongoDB database.
+
+    Args:
+        mode (int): The mode of the meeting (1 for Google Meet, 2 for Zoom).
+        file (UploadFile): The uploaded video file.
+
+    Process:
+        1. Save the uploaded video file to the server.
+        2. Extract the transcript from the video file based on the meeting mode.
+        3. Fetch events from the transcript and save them to the 'events' collection in MongoDB.
+        4. Fetch tasks from the transcript and save them to the 'todos' collection in MongoDB.
+
+    Returns:
+        JSON response with the status of the operation.
+    """
     try:
-        extractor = TaskExtractor(GEMINI_API_KEY)
-        aai.settings.api_key = ASSEMBLYAI_API_KEY
-        config = aai.TranscriptionConfig(speaker_labels=True)
-        transcript = aai.Transcriber().transcribe(audio_file_path, config)
+        # Save the uploaded file
+        file_location = f"videos/{file.filename}"
+        with open(file_location, "wb") as f:
+            f.write(file.file.read())
+
+        # Process the video file as needed
+        transcript = get_transcript_text(file_location, mode)
+        print("hello")
+        collection = db["transcripts"]
+        meeting_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        collection.insert_one({"segments": transcript, "meeting_id": meeting_id})
+        print("wagwan")
         utterances_info = [
-            {"speaker": u.speaker, "text": u.text, "start": u.start, "end": u.end}
-            for u in transcript.utterances
-        ]
-        tasks = extractor.process_transcript(utterances_info)
-        if save_tasks_to_json(tasks):
-            return {
-                "tasks": tasks,
-                "message": "Tasks successfully saved to todo_list.json",
+            {
+                "speaker": u["speaker"],
+                "text": u["text"],
+                "start": u["start_minutes"],
+                "end": u["end_minutes"],
             }
-        else:
-            return {"tasks": tasks, "message": "Failed to save tasks to JSON file"}
+            for u in transcript
+        ]
+
+        # Extract events from transcript
+        event_list = []
+        for req in transcript:
+            response = knowledge_extraction(text=req["text"], speaker=req["speaker"])
+            event_list.extend(response.events)
+        events_dicts = [event.dict() for event in event_list]
+        print(event_list)
+        collection = db["events"]
+        if events_dicts:
+            collection.insert_many(events_dicts)
+
+        # Extract tasks from transcript
+        extractor = TaskExtractor(GEMINI_API_KEY)
+        tasks_list = extractor.process_transcript(utterances_info)
+        formatted_tasks = []
+        for task in tasks_list:
+            deadline = task.get("deadline", None)
+            if deadline:
+                deadline = parse_relative_date(deadline)
+
+            formatted_task = {
+                "task": task.get("task", ""),
+                "deadline": deadline,
+                "priority": task.get("priority", "low"),
+                "timestamp": {
+                    "start": round(task.get("timestamp_start", 0), 2),
+                    "end": round(task.get("timestamp_end", 0), 2),
+                },
+            }
+            formatted_tasks.append(formatted_task)
+        collection = db["todos"]
+        if formatted_tasks:
+            collection.insert_many(formatted_tasks)
+
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

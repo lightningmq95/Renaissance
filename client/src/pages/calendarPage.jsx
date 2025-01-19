@@ -12,30 +12,19 @@ const CalendarPage = () => {
     const [events, setEvents] = useState([])
 
     useEffect(() => {
-        // Simulate fetching data from an API
-        const fetchedEvents = [
-            {
-                id: 1,
-                allDay: true,
-                title: 'Long Event',
-                start: new Date(2025, 1, 23),
-                end: new Date(2025, 1, 23),
-            },
-            {
-                id: 2,
-                allDay: true,
-                title: 'Another Event',
-                start: new Date(2025, 1, 25),
-                end: new Date(2025, 1, 26),
-            },
-        ]
-
+        // Fetch Todo data from backend
         const fetchEvents = async () => {
             try {
                 const response = await fetch('http://localhost:8000/get-todos')
                 const data = await response.json()
-                console.log(data)
-                // setEvents(data)
+                // Transform the data into the required format
+                const transformedEvents = data.map(item => ({
+                    title: item.task,
+                    start: new Date(item.deadline),
+                    end: new Date(item.deadline)
+                }))
+
+                setEvents(transformedEvents);
             } catch (error) {
                 console.error('Failed to fetch events:', error)
                 setEvents([])
@@ -46,7 +35,7 @@ const CalendarPage = () => {
 
     }, [])
     return (
-        <>
+        <div className="max-w-2xl mx-auto p-4">
             <Calendar
                 localizer={localizer}
                 events={events}
@@ -55,7 +44,7 @@ const CalendarPage = () => {
                 showMultiDayTimes
                 style={{ height: 500 }}
             />
-        </>
+        </div>
     )
 }
 
