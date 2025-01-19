@@ -1,0 +1,65 @@
+[
+  {
+    "task": "Investigate why students are skipping on Fridays.",
+    "deadline": null,
+    "priority": "medium",
+    "timestamp": {
+      "start": 0.006666666666666667,
+      "end": 0.28253333333333336
+    }
+  },
+  {
+    "task": "Host a pancake breakfast next week to encourage student attendance on Fridays.",
+    "deadline": "next week",
+    "priority": "low",
+    "timestamp": {
+      "start": 0.2856,
+      "end": 0.43196666666666667
+    }
+  },
+  {
+    "task": "Put up posters with tips for not getting sick.",
+    "deadline": null,
+    "priority": "medium",
+    "timestamp": {
+      "start": 0.5001666666666666,
+      "end": 0.7435
+    }
+  },
+  {
+    "task": "Investigate why John Smith has missed seven days of school.",
+    "deadline": null,
+    "priority": "high",
+    "timestamp": {
+      "start": 0.7455,
+      "end": 1.0016
+    }
+  },
+  {
+    "task": "Send John to Speaker B's office after meeting with him.",
+    "deadline": null,
+    "priority": "high",
+    "timestamp": {
+      "start": 1.2257333333333333,
+      "end": 1.5154333333333334
+    }
+  },
+  {
+    "task": "Look for free or low cost childcare resources in the community.",
+    "deadline": null,
+    "priority": "high",
+    "timestamp": {
+      "start": 1.2257333333333333,
+      "end": 1.5154333333333334
+    }
+  },
+  {
+    "task": "John should speak to the guidance counselor.",
+    "deadline": null,
+    "priority": "high",
+    "timestamp": {
+      "start": 1.0041333333333333,
+      "end": 1.2234666666666667
+    }
+  }
+]

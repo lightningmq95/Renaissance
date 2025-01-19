@@ -67,12 +67,20 @@ export function NavBar() {
               </Link>
             </NavigationMenuItem>
             <NavigationMenuItem>
+              <Link to="/query">
+                <NavigationMenuLink className={navigationMenuTriggerStyle()}>
+                  Query
+                </NavigationMenuLink>
+              </Link>
+            </NavigationMenuItem>
+            <NavigationMenuItem>
               <Link to="/calendar">
                 <NavigationMenuLink className={navigationMenuTriggerStyle()}>
                   Calendar
                 </NavigationMenuLink>
               </Link>
             </NavigationMenuItem>
+
             <NavigationMenuItem>
               <Link to="/meetings">
                 <NavigationMenuLink className={navigationMenuTriggerStyle()}>

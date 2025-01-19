@@ -5,6 +5,7 @@ import reactLogo from "./assets/react.svg";
 import viteLogo from "/vite.svg";
 import "./App.css";
 import CalendarPage from "./pages/calendarPage";
+import QueryPage from "./pages/queryPage";
 import { NavBar } from "./components/navbar";
 import RealTime from "./pages/RealTime";
 import Meetings from "./pages/meetings";
@@ -24,9 +25,7 @@ function App() {
             <Route path="realTime" element={<RealTime />} />
             <Route path="meetings" element={<Meetings />} />
             <Route path="onlineMeeting" element={<OnlineMeeting />} />
-            {/* <Route path="blogs" element={<Blogs />} />
-            <Route path="contact" element={<Contact />} />
-            <Route path="*" element={<NoPage />} /> */}
+            <Route path="query" element={<QueryPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
