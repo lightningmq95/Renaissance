@@ -20,6 +20,8 @@ from fastapi import UploadFile, File, Form
 import traceback
 import dateparser
 import logging
+from typing import Optional
+
 
 
 from fastapi.middleware.cors import CORSMiddleware
@@ -144,13 +146,12 @@ class EventEntity(BaseModel):
     type: str
     role: str
 
-
 class Event(BaseModel):
     action: str
-    type: str
-    date: str
-    location: str
-    entities: List[EventEntity]
+    type: Optional[str] = None
+    date: Optional[str] = None
+    location: Optional[str] = None
+    entities: Optional[List[EventEntity]] = []
 
 
 # %%
@@ -222,9 +223,11 @@ class KnowledgeExtraction(dspy.Module):
     def forward(self, text, speaker):
         entities = self.extract_entities(text)
         current_date = datetime.now().strftime("%Y-%m-%d")
+        
         events = self.cot2(
             text=text, speaker=speaker, entities=entities, current_date=current_date
         )
+        print(events)
         return events
 
 # Programming the RAG Module
@@ -417,6 +420,7 @@ def get_transcript_text(video_file_path, mode):
     cap.release()
     cv2.destroyAllWindows()
     return transcript_list
+
 
 
 # %%
@@ -694,6 +698,23 @@ def get_todos():
 
 @app.post("/upload-video")
 async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
+    """
+    Endpoint to upload a video file, process it to extract transcript, events, and tasks,
+    and save the results to the MongoDB database.
+
+    Args:
+        mode (int): The mode of the meeting (1 for Google Meet, 2 for Zoom).
+        file (UploadFile): The uploaded video file.
+
+    Process:
+        1. Save the uploaded video file to the server.
+        2. Extract the transcript from the video file based on the meeting mode.
+        3. Fetch events from the transcript and save them to the 'events' collection in MongoDB.
+        4. Fetch tasks from the transcript and save them to the 'todos' collection in MongoDB.
+
+    Returns:
+        JSON response with the status of the operation.
+    """
     try:
         # Save the uploaded file
         file_location = f"videos/{file.filename}"
@@ -722,8 +743,10 @@ async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
             response = knowledge_extraction(text=req['text'], speaker=req['speaker'])
             event_list.extend(response.events)
         events_dicts = [event.dict() for event in event_list]
+        print(event_list)
         collection = db['events']
-        collection.insert_many(events_dicts)
+        if events_dicts:
+            collection.insert_many(events_dicts)
 
         # Extract tasks from transcript
         extractor = TaskExtractor(GEMINI_API_KEY)
@@ -745,9 +768,8 @@ async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
             }
             formatted_tasks.append(formatted_task)
         collection = db['todos']
-        collection.insert_many(formatted_tasks)
-
-
+        if formatted_tasks:
+            collection.insert_many(formatted_tasks)
  
     except Exception as e:
         print(e)
