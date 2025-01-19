@@ -9,6 +9,7 @@ from typing import List
 from datetime import datetime
 from pymongo import MongoClient
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
@@ -118,18 +119,24 @@ class RAG(dspy.Module):
 
     def forward(self, question):
         # Fetch records from MongoDB
-        records = collection.find()
-
+        collections = ['events', 'todos']
         corpus = []
-        for record in records:
-            context = ""
-            for key, value in record.items():
-                if key == "_id":
-                    continue
-                # Convert key to proper case
-                proper_case_key = key.replace('_', ' ').title().replace(' ', '')
-                context += f"{proper_case_key}: {value}\n"
-            corpus.append(context)
+
+        for collection_name in collections:
+            collection = db[collection_name]
+            records = collection.find()
+            
+            for record in records:
+                context = ""
+                for key, value in record.items():
+                    if key == "_id":
+                        continue
+                    # Convert key to proper case
+                    proper_case_key = key.replace('_', ' ').title().replace(' ', '')
+                    context += f"{proper_case_key}: {value}\n"
+                corpus.append(context)
+
+        records = collection.find()
             
         embedder = dspy.Embedder('gemini/text-embedding-004')
         search = dspy.retrievers.Embeddings(embedder=embedder, corpus=corpus, k=5)
@@ -138,7 +145,23 @@ class RAG(dspy.Module):
 
 
 # %%
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:5173",
+    "http://localhost:8080",
+]
+
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # %%
 # Initialize modules
@@ -153,6 +176,9 @@ def extract_events(request: List[TranscriptRequest]):
         for req in request:
             response = knowledge_extraction(text=req.text, speaker=req.speaker)
             event_list.extend(response.events)
+        events_dicts = [event.dict() for event in event_list]
+        collection = db['events']
+        collection.insert_many(events_dicts)
         return event_list
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -169,8 +195,20 @@ def query_rag(request: QueryRequest):
 def get_todos():
     try:
         collection = db['todos']
-        todos = collection.find()
-        return todos
+        todos = collection.find({"deadline": {"$exists": True, "$ne": None}})
+        todo_responses = []
+
+        for record in todos:
+            todo_response = {
+                'task':str(record.get('task', '')),
+                'deadline':str(record.get('deadline', '')),
+                'priority':str(record.get('priority', '')),
+            }
+            todo_responses.append(todo_response)
+
+        print(todo_responses)
+        return todo_responses
+        # print(corpus)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

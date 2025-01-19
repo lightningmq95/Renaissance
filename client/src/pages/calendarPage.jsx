@@ -32,9 +32,10 @@ const CalendarPage = () => {
 
         const fetchEvents = async () => {
             try {
-                const response = await fetch('https://api.example.com/events')
+                const response = await fetch('http://localhost:8000/get-todos')
                 const data = await response.json()
-                setEvents(data)
+                console.log(data)
+                // setEvents(data)
             } catch (error) {
                 console.error('Failed to fetch events:', error)
                 setEvents([])
@@ -44,7 +45,6 @@ const CalendarPage = () => {
 
 
     }, [])
-    console.log(events)
     return (
         <>
             <Calendar
