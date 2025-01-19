@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { BrowserRouter, Routes, Route } from "react-router-dom"
+import CalendarPage from './pages/calendarPage'
 import Home from './pages/home'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
+import { NavBar } from './components/navbar'
 import './App.css'
 
 function App() {
@@ -11,10 +11,11 @@ function App() {
   return (
     <>
       <BrowserRouter>
+        <NavBar />
         <Routes>
           <Route path="/" >
             <Route index element={<Home />} />
-            <Route path="about" element={<Home />} />
+            <Route path="calendar" element={<CalendarPage />} />
             {/* <Route path="blogs" element={<Blogs />} />
             <Route path="contact" element={<Contact />} />
             <Route path="*" element={<NoPage />} /> */}
