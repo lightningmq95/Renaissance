@@ -880,8 +880,24 @@ async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
         # Extract tasks from transcript
         extractor = TaskExtractor(GEMINI_API_KEY)
         tasks_list = extractor.process_transcript(utterances_info)
+        formatted_tasks = []
+        for task in tasks_list:
+            deadline = task.get("deadline", None)
+            if deadline:
+                deadline = parse_relative_date(deadline)
+
+            formatted_task = {
+                "task": task.get("task", ""),
+                "deadline": deadline,
+                "priority": task.get("priority", "low"),
+                "timestamp": {
+                    "start": round(task.get("timestamp_start", 0), 2),
+                    "end": round(task.get("timestamp_end", 0), 2),
+                },
+            }
+            formatted_tasks.append(formatted_task)
         collection = db['todos']
-        collection.insert_many(tasks_list)
+        collection.insert_many(formatted_tasks)
 
 
  
