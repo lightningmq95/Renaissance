@@ -30,6 +30,19 @@ import time
 
 load_dotenv()
 
+import os
+import numpy as np
+import cv2
+import easyocr
+import assemblyai as aai
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from collections import Counter
+from dotenv import load_dotenv
+
+
+load_dotenv()
+aai.settings.api_key = os.getenv("ASSEMBLYAI_API_KEY")
+reader = easyocr.Reader(['en'])
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGODB_URI = os.getenv("MONGODB_URI")
@@ -492,63 +505,131 @@ def parse_relative_date(relative_date_str):
         return parsed_date.strftime("%Y-%m-%d")
     return relative_date_str
 
+def transcribe_audio(audio_file_path):
+    config = aai.TranscriptionConfig(speaker_labels=True)
+    transcript = aai.Transcriber().transcribe(audio_file_path, config)
+    results = []
+    for utterance in transcript.utterances:
+        start = utterance.start / 1000
+        end = utterance.end / 1000
+        result = (start, end, utterance.speaker, utterance.text)
+        results.append(result)
+    return results
 
+def process_contour_region(frame, x, y, w, h):
+    roi = frame[y:y+h, x:x+w]
+    results = reader.readtext(roi)
+    text = ' '.join([result[1] for result in results])
+    return text.strip() if text.strip() else "Unknown Speaker"
 
 def get_transcript_text(video_file_path, mode):
-    # aai.settings.api_key = AIA_API_KEY
-    # config = aai.TranscriptionConfig(speaker_labels=True)
-    # transcript = aai.Transcriber().transcribe(video_file_path, config)
-    transcript = [
-  {
-    "start_minutes": 0.01,
-    "end_minutes": 0.28,
-    "speaker": "A",
-    "text": "Hello, everyone. Thank you guys for coming to our weekly student success meeting. And let's just get started. So I have our list of chronically absent students here. And I've been noticing a troubling trend. A lot of students are skipping on Fridays. Does anyone have any idea what's going on?"
-  },
-  {
-    "start_minutes": 0.29,
-    "end_minutes": 0.43,
-    "speaker": "C",
-    "text": "I've heard some of my mentees talking about how it's really hard to get out of bed on Fridays. It might be good if we did something like a pancake breakfast to encourage them to come."
-  },
-  {
-    "start_minutes": 0.44,
-    "end_minutes": 0.49,
-    "speaker": "A",
-    "text": "I think that's a great idea. Let's try that next week."
-  },
-  {
-    "start_minutes": 0.5,
-    "end_minutes": 0.74,
-    "speaker": "D",
-    "text": "It might also be because a lot of students have been getting sick now that it's getting colder outside. I've had a number of students come by my office with symptoms like sniffling and coughing. We should put up posters with tips for not getting sick since it's almost flu season. Like, you know, wash your hands after the bathroom, stuff like that."
-  },
-  {
-    "start_minutes": 0.75,
-    "end_minutes": 1.0,
-    "speaker": "A",
-    "text": "I think that's a good idea and it'll be a good reminder for the teachers as well. So one other thing I wanted to talk about. There's a student I've noticed here, John Smith. He's missed seven days already and it's only November. Does anyone have an idea what's going on with him?"
-  },
-  {
-    "start_minutes": 1.0,
-    "end_minutes": 1.22,
-    "speaker": "C",
-    "text": "I might be able to fill in the gaps there. I talked to John today and he's really stressed out. He's been dealing with helping his parents take care of his younger siblings during the day. It might actually be a good idea if he spoke to the guidance counselor a little bit."
-  },
-  {
-    "start_minutes": 1.23,
-    "end_minutes": 1.52,
-    "speaker": "B",
-    "text": "I can talk to John today if you want to send him to my office after you meet with him. It's a lot to deal with for a middle schooler. Great, thanks. And I can help out with the family's childcare needs. I'll look for some free or low cost resources in the community to share with John and he can share them with his family."
-  },
-  {
-    "start_minutes": 1.52,
-    "end_minutes": 1.62,
-    "speaker": "A",
-    "text": "Great. Well, some really good ideas here today. Thanks for coming. And if no one has anything else, I think we can wrap up."
-  }
-]
-    return transcript
+#     # aai.settings.api_key = AIA_API_KEY
+#     # config = aai.TranscriptionConfig(speaker_labels=True)
+#     # transcript = aai.Transcriber().transcribe(video_file_path, config)
+#     transcript = [
+#   {
+#     "start_minutes": 0.01,
+#     "end_minutes": 0.28,
+#     "speaker": "A",
+#     "text": "Hello, everyone. Thank you guys for coming to our weekly student success meeting. And let's just get started. So I have our list of chronically absent students here. And I've been noticing a troubling trend. A lot of students are skipping on Fridays. Does anyone have any idea what's going on?"
+#   },
+#   {
+#     "start_minutes": 0.29,
+#     "end_minutes": 0.43,
+#     "speaker": "C",
+#     "text": "I've heard some of my mentees talking about how it's really hard to get out of bed on Fridays. It might be good if we did something like a pancake breakfast to encourage them to come."
+#   },
+#   {
+#     "start_minutes": 0.44,
+#     "end_minutes": 0.49,
+#     "speaker": "A",
+#     "text": "I think that's a great idea. Let's try that next week."
+#   },
+#   {
+#     "start_minutes": 0.5,
+#     "end_minutes": 0.74,
+#     "speaker": "D",
+#     "text": "It might also be because a lot of students have been getting sick now that it's getting colder outside. I've had a number of students come by my office with symptoms like sniffling and coughing. We should put up posters with tips for not getting sick since it's almost flu season. Like, you know, wash your hands after the bathroom, stuff like that."
+#   },
+#   {
+#     "start_minutes": 0.75,
+#     "end_minutes": 1.0,
+#     "speaker": "A",
+#     "text": "I think that's a good idea and it'll be a good reminder for the teachers as well. So one other thing I wanted to talk about. There's a student I've noticed here, John Smith. He's missed seven days already and it's only November. Does anyone have an idea what's going on with him?"
+#   },
+#   {
+#     "start_minutes": 1.0,
+#     "end_minutes": 1.22,
+#     "speaker": "C",
+#     "text": "I might be able to fill in the gaps there. I talked to John today and he's really stressed out. He's been dealing with helping his parents take care of his younger siblings during the day. It might actually be a good idea if he spoke to the guidance counselor a little bit."
+#   },
+#   {
+#     "start_minutes": 1.23,
+#     "end_minutes": 1.52,
+#     "speaker": "B",
+#     "text": "I can talk to John today if you want to send him to my office after you meet with him. It's a lot to deal with for a middle schooler. Great, thanks. And I can help out with the family's childcare needs. I'll look for some free or low cost resources in the community to share with John and he can share them with his family."
+#   },
+#   {
+#     "start_minutes": 1.52,
+#     "end_minutes": 1.62,
+#     "speaker": "A",
+#     "text": "Great. Well, some really good ideas here today. Thanks for coming. And if no one has anything else, I think we can wrap up."
+#   }
+# ]
+#     return transcript
+    """
+    Process video and return transcript with speaker identification
+    Args:
+        video_path (str): Path to video file
+        meeting_type (str): '1' for Google Meet, '2' for Zoom
+    Returns:
+        list: List of dicts with speaker and transcript
+    """
+    cap = cv2.VideoCapture(video_file_path)
+    transcription_results = transcribe_audio(video_file_path)
+    transcript_list = []
+
+    for start_time, end_time, speaker, text in transcription_results:
+        text_counter = Counter()
+        duration = end_time - start_time
+        analysis_end = start_time + min(duration, 10)
+
+        for t in np.arange(start_time, analysis_end, 0.5):
+            cap.set(cv2.CAP_PROP_POS_MSEC, t * 1000)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            
+            if mode == '1':  # Google Meet
+                mask = cv2.inRange(hsv, np.array([100,50,50]), np.array([130,255,255]))
+            else:  # Zoom
+                mask = cv2.inRange(hsv, np.array([40,50,50]), np.array([80,255,255]))
+
+            cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
+
+            if len(cnts) > 0:
+                area = max(cnts, key=cv2.contourArea)
+                x, y, w, h = cv2.boundingRect(area)
+                speaker_name = process_contour_region(frame, x, y, w, h)
+                text_counter[speaker_name] += 1
+
+        most_common_speaker = text_counter.most_common(1)[0][0] if text_counter else "Unknown Speaker"
+        
+        transcript_dict = {
+            most_common_speaker: {
+                "text": text,
+                "start_time": start_time,
+                "end_time": end_time
+            }
+        }
+        transcript_list.append(transcript_dict)
+
+    cap.release()
+    cv2.destroyAllWindows()
+    return transcript_list
+
 
 def save_tasks_to_json(tasks, output_file='todo_list.json'):
     """
