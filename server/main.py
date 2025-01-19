@@ -528,60 +528,6 @@ def process_contour_region(frame, x, y, w, h):
     return text.strip() if text.strip() else "Unknown Speaker"
 
 def get_transcript_text(video_file_path, mode):
-#     # aai.settings.api_key = AIA_API_KEY
-#     # config = aai.TranscriptionConfig(speaker_labels=True)
-#     # transcript = aai.Transcriber().transcribe(video_file_path, config)
-#     transcript = [
-#   {
-#     "start_minutes": 0.01,
-#     "end_minutes": 0.28,
-#     "speaker": "A",
-#     "text": "Hello, everyone. Thank you guys for coming to our weekly student success meeting. And let's just get started. So I have our list of chronically absent students here. And I've been noticing a troubling trend. A lot of students are skipping on Fridays. Does anyone have any idea what's going on?"
-#   },
-#   {
-#     "start_minutes": 0.29,
-#     "end_minutes": 0.43,
-#     "speaker": "C",
-#     "text": "I've heard some of my mentees talking about how it's really hard to get out of bed on Fridays. It might be good if we did something like a pancake breakfast to encourage them to come."
-#   },
-#   {
-#     "start_minutes": 0.44,
-#     "end_minutes": 0.49,
-#     "speaker": "A",
-#     "text": "I think that's a great idea. Let's try that next week."
-#   },
-#   {
-#     "start_minutes": 0.5,
-#     "end_minutes": 0.74,
-#     "speaker": "D",
-#     "text": "It might also be because a lot of students have been getting sick now that it's getting colder outside. I've had a number of students come by my office with symptoms like sniffling and coughing. We should put up posters with tips for not getting sick since it's almost flu season. Like, you know, wash your hands after the bathroom, stuff like that."
-#   },
-#   {
-#     "start_minutes": 0.75,
-#     "end_minutes": 1.0,
-#     "speaker": "A",
-#     "text": "I think that's a good idea and it'll be a good reminder for the teachers as well. So one other thing I wanted to talk about. There's a student I've noticed here, John Smith. He's missed seven days already and it's only November. Does anyone have an idea what's going on with him?"
-#   },
-#   {
-#     "start_minutes": 1.0,
-#     "end_minutes": 1.22,
-#     "speaker": "C",
-#     "text": "I might be able to fill in the gaps there. I talked to John today and he's really stressed out. He's been dealing with helping his parents take care of his younger siblings during the day. It might actually be a good idea if he spoke to the guidance counselor a little bit."
-#   },
-#   {
-#     "start_minutes": 1.23,
-#     "end_minutes": 1.52,
-#     "speaker": "B",
-#     "text": "I can talk to John today if you want to send him to my office after you meet with him. It's a lot to deal with for a middle schooler. Great, thanks. And I can help out with the family's childcare needs. I'll look for some free or low cost resources in the community to share with John and he can share them with his family."
-#   },
-#   {
-#     "start_minutes": 1.52,
-#     "end_minutes": 1.62,
-#     "speaker": "A",
-#     "text": "Great. Well, some really good ideas here today. Thanks for coming. And if no one has anything else, I think we can wrap up."
-#   }
-# ]
-#     return transcript
     """
     Process video and return transcript with speaker identification
     Args:
@@ -622,13 +568,7 @@ def get_transcript_text(video_file_path, mode):
 
         most_common_speaker = text_counter.most_common(1)[0][0] if text_counter else "Unknown Speaker"
         
-        transcript_dict = {
-            most_common_speaker: {
-                "text": text,
-                "start_time": start_time,
-                "end_time": end_time
-            }
-        }
+        transcript_dict = {"start_minutes": start_time, "end_minutes": end_time, "speaker": most_common_speaker, "text": text}
         transcript_list.append(transcript_dict)
 
     cap.release()
@@ -937,9 +877,11 @@ async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
         
         # Process the video file as needed
         transcript = get_transcript_text(file_location, mode)
+        print("hello")
         collection = db['transcripts']
         meeting_id = datetime.now().strftime("%Y%m%d-%H%M%S")
         collection.insert_one({"segments": transcript, "meeting_id": meeting_id})
+        print("wagwan")
         utterances_info = [
             {
                 "speaker": u['speaker'],

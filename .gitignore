@@ -4,3 +4,4 @@ recordings
 samples/
 .env
 server/__pycachee__
+server/videos/
