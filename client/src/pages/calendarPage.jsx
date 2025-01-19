@@ -12,7 +12,7 @@ const CalendarPage = () => {
     const [events, setEvents] = useState([])
 
     useEffect(() => {
-        // Simulate fetching data from an API
+        // Fetch Todo data from backend
         const fetchEvents = async () => {
             try {
                 const response = await fetch('http://localhost:8000/get-todos')
