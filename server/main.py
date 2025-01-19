@@ -9,6 +9,7 @@ from typing import List
 from datetime import datetime
 from pymongo import MongoClient
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
@@ -138,7 +139,23 @@ class RAG(dspy.Module):
 
 
 # %%
+origins = [
+    "http://localhost.tiangolo.com",
+    "https://localhost.tiangolo.com",
+    "http://localhost",
+    "http://localhost:5173",
+    "http://localhost:8080",
+]
+
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # %%
 # Initialize modules
@@ -169,8 +186,20 @@ def query_rag(request: QueryRequest):
 def get_todos():
     try:
         collection = db['todos']
-        todos = collection.find()
-        return todos
+        todos = collection.find({"deadline": {"$exists": True, "$ne": None}})
+        todo_responses = []
+
+        for record in todos:
+            todo_response = {
+                'task':str(record.get('task', '')),
+                'deadline':str(record.get('deadline', '')),
+                'priority':str(record.get('priority', '')),
+            }
+            todo_responses.append(todo_response)
+
+        print(todo_responses)
+        return todo_responses
+        # print(corpus)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
