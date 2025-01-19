@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import UploadFile, File
 import logging
 import traceback
+import dateparser
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
