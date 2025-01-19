@@ -1,0 +1,12 @@
+fastapi
+pydantic
+uvicorn
+python-dotenv
+pymongo
+spacy
+assemblyai
+langchain
+google-generativeai
+markdown
+dateparser
+dspy

@@ -53,6 +53,8 @@ ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY")
 llm = GoogleGenerativeAI(
     model="gemini-pro", google_api_key=GEMINI_API_KEY, temperature=0
 )
+aai.settings.api_key = ASSEMBLYAI_API_KEY
+
 
 # LLM Chain configurations for refining, todos, and summary
 refining_template = """Refine the following text from a company meeting transcription. 
@@ -256,19 +258,6 @@ class RAG(dspy.Module):
         context = search(question).passages
         return self.respond(context=context, question=question)
 
-
-def milliseconds_to_minutes(milliseconds):
-    return milliseconds / (1000 * 60)
-
-
-def batch_list(items, batch_size):
-    for i in range(0, len(items), batch_size):
-        yield items[i : i + batch_size]
-
-
-aai.settings.api_key = ASSEMBLYAI_API_KEY
-
-
 # TaskExtractor class
 class TaskExtractor:
     def __init__(self, gemini_api_key):
@@ -357,152 +346,6 @@ class TaskExtractor:
             print(f"Error: {e}")
             return []
 
-
-def format_todo_list(tasks):
-    """Format tasks into a readable todo list with optional timestamp handling"""
-    if not tasks:
-        return "No tasks found in the transcript."
-
-    formatted_list = []
-
-    # Sort tasks by priority (high -> medium -> low)
-    priority_order = {"high": 0, "medium": 1, "low": 2}
-    sorted_tasks = sorted(
-        tasks, key=lambda x: priority_order.get(x.get("priority", "low"), 3)
-    )
-
-    for task in sorted_tasks:
-        # Build the task string components
-        deadline_str = (
-            f" (Deadline: {task['deadline']})" if task.get("deadline") else ""
-        )
-        priority_str = f"[{task['priority'].upper()}]" if task.get("priority") else ""
-
-        # Only add timestamp and speaker if they exist
-        speaker_str = f"Speaker {task['speaker']}: " if task.get("speaker") else ""
-
-        if (
-            task.get("timestamp_start") is not None
-            and task.get("timestamp_end") is not None
-        ):
-            timestamp_str = (
-                f"[{task['timestamp_start']:.2f} - {task['timestamp_end']:.2f}]"
-            )
-        else:
-            timestamp_str = ""
-
-        todo_item = f"- {speaker_str}{task['task']} {priority_str}{deadline_str} {timestamp_str}".strip()
-        formatted_list.append(todo_item)
-
-    return "\n".join(formatted_list)
-
-
-def process_audio_to_tasks(audio_file_path, aai_api_key, gemini_api_key):
-    """Process audio file to extract tasks with improved error handling"""
-    try:
-        # Set up AssemblyAI
-        aai.settings.api_key = aai_api_key
-
-        # Configure transcription
-        config = aai.TranscriptionConfig(speaker_labels=True)
-
-        print("\n=== Starting Audio Transcription ===")
-        transcript = aai.Transcriber().transcribe(audio_file_path, config)
-
-        print("\n=== Full Transcript Text ===")
-        print(transcript.text)
-
-        print("\n=== Processing Utterances ===")
-        utterances_info = []
-
-        for utterance in transcript.utterances:
-            # Convert timestamps to minutes
-            start_minutes = utterance.start / (1000 * 60)
-            end_minutes = utterance.end / (1000 * 60)
-
-            utterance_data = {
-                "speaker": utterance.speaker,
-                "text": utterance.text,
-                "start": start_minutes,
-                "end": end_minutes,
-            }
-            utterances_info.append(utterance_data)
-
-            print(f"\nUtterance Details:")
-            print(f"Speaker: {utterance.speaker}")
-            print(f"Text: {utterance.text}")
-            print(f"Time: {start_minutes:.2f} - {end_minutes:.2f}")
-
-        if not utterances_info:
-            print("No utterances found in transcript")
-            return []
-
-        # Create formatted transcript
-        formatted_transcript = "\n".join(
-            [
-                f"{u['start']:.2f}\n"
-                f"Speaker {u['speaker']}: {u['text']}\n"
-                f"{u['end']:.2f}\n"
-                for u in utterances_info
-            ]
-        )
-
-        print("\n=== Extracting Tasks ===")
-        extractor = TaskExtractor(gemini_api_key)
-
-        # Try batch processing first
-        print("\nTrying batched processing...")
-        tasks = extractor.process_transcript(utterances_info)
-
-        # If batch processing finds no tasks, try direct processing
-        if not tasks:
-            print("\nBatch processing found no tasks. Trying direct processing...")
-            direct_tasks = extractor.extract_tasks(formatted_transcript)
-
-            # If direct processing found tasks, add timing information
-            if direct_tasks:
-                print("\nDirect processing found tasks. Adding timing information...")
-                tasks = []
-                for task in direct_tasks:
-                    # Find the most relevant utterance for this task
-                    best_match = None
-                    max_overlap = 0
-
-                    for utterance in utterances_info:
-                        task_words = set(task["task"].lower().split())
-                        utterance_words = set(utterance["text"].lower().split())
-                        overlap = len(task_words.intersection(utterance_words))
-
-                        if overlap > max_overlap:
-                            max_overlap = overlap
-                            best_match = utterance
-
-                    if best_match:
-                        task.update(
-                            {
-                                "speaker": best_match["speaker"],
-                                "timestamp_start": best_match["start"],
-                                "timestamp_end": best_match["end"],
-                            }
-                        )
-                        tasks.append(task)
-                    else:
-                        # If no matching utterance found, add task without timing info
-                        tasks.append(task)
-
-        return tasks
-
-    except Exception as e:
-        print(f"\n=== Error in Processing ===")
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        print("\nTraceback:")
-        import traceback
-
-        traceback.print_exc()
-        return []
-
-
 def parse_relative_date(relative_date_str):
     """Parse relative date strings like 'today', 'tomorrow', 'next week' into actual dates"""
     parsed_date = dateparser.parse(relative_date_str)
@@ -574,44 +417,6 @@ def get_transcript_text(video_file_path, mode):
     cap.release()
     cv2.destroyAllWindows()
     return transcript_list
-
-
-def save_tasks_to_json(tasks, output_file='todo_list.json'):
-    """
-    Save tasks to a JSON file with standardized format
-    Args:
-        tasks: List of task dictionaries
-        output_file: Path to output JSON file
-    """
-    if not tasks:
-        return False
-
-    # Standardize the task format for JSON output
-    formatted_tasks = []
-    for task in tasks:
-        deadline = task.get("deadline", None)
-        if deadline:
-            deadline = parse_relative_date(deadline)
-
-        formatted_task = {
-            "task": task.get("task", ""),
-            "deadline": deadline,
-            "priority": task.get("priority", "low"),
-            "timestamp": {
-                "start": round(task.get("timestamp_start", 0), 2),
-                "end": round(task.get("timestamp_end", 0), 2),
-            },
-        }
-        formatted_tasks.append(formatted_task)
-
-    # Save to JSON file
-    try:
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(formatted_tasks, f, indent=2, ensure_ascii=False)
-        return True
-    except Exception as e:
-        print(f"Error saving JSON file: {e}")
-        return False
 
 
 # %%
@@ -838,6 +643,15 @@ def get_summary():
 
 @app.post("/query-rag", response_model=str)
 def query_rag(request: QueryRequest):
+    """
+    Endpoint to query the RAG model with a question.
+
+    Args:
+        request (QueryRequest): The request containing the question.
+
+    Returns:
+        str: The response from the RAG model.
+    """
     try:
         responses = rag(question=request.question)
         return responses.response
@@ -847,6 +661,17 @@ def query_rag(request: QueryRequest):
 
 @app.get("/get-todos", response_model=List[TodoResponse])
 def get_todos():
+    """
+    Endpoint to upload a video file, process it to extract transcript, events, and tasks,
+    and save the results to the MongoDB database.
+
+    Args:
+        mode (int): The mode of the meeting (e.g., 1 for Google Meet, 2 for Zoom).
+        file (UploadFile): The uploaded video file.
+
+    Returns:
+        JSON response with the status of the operation.
+    """
     try:
         collection = db["todos"]
         todos = collection.find({"deadline": {"$exists": True, "$ne": None}})
@@ -903,8 +728,24 @@ async def upload_video(mode: int = Form(...), file: UploadFile = File(...)):
         # Extract tasks from transcript
         extractor = TaskExtractor(GEMINI_API_KEY)
         tasks_list = extractor.process_transcript(utterances_info)
+        formatted_tasks = []
+        for task in tasks_list:
+            deadline = task.get("deadline", None)
+            if deadline:
+                deadline = parse_relative_date(deadline)
+
+            formatted_task = {
+                "task": task.get("task", ""),
+                "deadline": deadline,
+                "priority": task.get("priority", "low"),
+                "timestamp": {
+                    "start": round(task.get("timestamp_start", 0), 2),
+                    "end": round(task.get("timestamp_end", 0), 2),
+                },
+            }
+            formatted_tasks.append(formatted_task)
         collection = db['todos']
-        collection.insert_many(tasks_list)
+        collection.insert_many(formatted_tasks)
 
 
  

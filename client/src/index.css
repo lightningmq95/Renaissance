@@ -1,3 +1,8 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    --radius: 0.5rem;
+    /* You can adjust this value as needed */
+}
