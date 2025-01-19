@@ -1,12 +1,10 @@
 # %%
 import time
-from flask import jsonify, request
 import markdown
 import dspy
 import json
 import os
 import spacy
-import warnings
 import assemblyai as aai
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -19,22 +17,19 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import UploadFile, File
-import logging
 import traceback
 import dateparser
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import File, UploadFile
 
 import google.generativeai as genai
 import assemblyai as aai
 import time
-import itertools
 
 load_dotenv()
-warnings.filterwarnings("ignore")
+
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 MONGODB_URI = os.getenv("MONGODB_URI")
