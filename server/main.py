@@ -10,6 +10,8 @@ from datetime import datetime
 from pymongo import MongoClient
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import File, UploadFile
+
 import google.generativeai as genai
 import assemblyai as aai
 import time
@@ -43,6 +45,7 @@ lm = dspy.LM('gemini/gemini-2.0-flash-exp', api_key=GEMINI_API_KEY)
 dspy.configure(lm=lm)
 
 # %%
+# Define Data models to be used by DSPy
 class Entity(BaseModel):
     entity: str
     type: str
@@ -211,13 +214,30 @@ class TaskExtractor:
 
     def extract_tasks(self, text_batch):
         self._rate_limit()
-        prompt = f"""
-        Extract action items and tasks from the following conversation text...
-        {text_batch}
-        """
+        # prompt = f"""
+        # Extract action items and tasks from the following conversation text...
+        # {text_batch}
+        # """
+        prompt = """
+        Extract action items and tasks from the following conversation text. 
+        Look for any statements that imply something needs to be done, assignments given, or commitments made.
+        Include both explicit tasks ("I'll do X") and implicit tasks ("We need to X", "X should be done").
+        
+        Provide results in JSON with these keys:
+        - task: The task description (required)
+        - deadline: The deadline mentioned, or null if not available
+        - priority: Either 'high', 'medium', or 'low' based on urgency words and context
+        
+        Text: {text}
+        
+        Return an empty array [] if no tasks are found.
+        Ensure the response is valid JSON.
+        """.format(text=text_batch)
         try:
             response = self.model.generate_content(prompt)
+            # print(response.text)
             json_str = response.text.strip('```json').strip('```')
+            print(json_str)
             return json.loads(json_str)
         except Exception as e:
             print(f"Error: {e}")
@@ -359,6 +379,62 @@ def parse_relative_date(relative_date_str):
         return parsed_date.strftime('%Y-%m-%d')
     return relative_date_str
 
+def get_transcript_text(video_file_path, mode):
+    # aai.settings.api_key = AIA_API_KEY
+    # config = aai.TranscriptionConfig(speaker_labels=True)
+    # transcript = aai.Transcriber().transcribe(video_file_path, config)
+    transcript = [
+  {
+    "start_minutes": 0.01,
+    "end_minutes": 0.28,
+    "speaker": "A",
+    "text": "Hello, everyone. Thank you guys for coming to our weekly student success meeting. And let's just get started. So I have our list of chronically absent students here. And I've been noticing a troubling trend. A lot of students are skipping on Fridays. Does anyone have any idea what's going on?"
+  },
+  {
+    "start_minutes": 0.29,
+    "end_minutes": 0.43,
+    "speaker": "C",
+    "text": "I've heard some of my mentees talking about how it's really hard to get out of bed on Fridays. It might be good if we did something like a pancake breakfast to encourage them to come."
+  },
+  {
+    "start_minutes": 0.44,
+    "end_minutes": 0.49,
+    "speaker": "A",
+    "text": "I think that's a great idea. Let's try that next week."
+  },
+  {
+    "start_minutes": 0.5,
+    "end_minutes": 0.74,
+    "speaker": "D",
+    "text": "It might also be because a lot of students have been getting sick now that it's getting colder outside. I've had a number of students come by my office with symptoms like sniffling and coughing. We should put up posters with tips for not getting sick since it's almost flu season. Like, you know, wash your hands after the bathroom, stuff like that."
+  },
+  {
+    "start_minutes": 0.75,
+    "end_minutes": 1.0,
+    "speaker": "A",
+    "text": "I think that's a good idea and it'll be a good reminder for the teachers as well. So one other thing I wanted to talk about. There's a student I've noticed here, John Smith. He's missed seven days already and it's only November. Does anyone have an idea what's going on with him?"
+  },
+  {
+    "start_minutes": 1.0,
+    "end_minutes": 1.22,
+    "speaker": "C",
+    "text": "I might be able to fill in the gaps there. I talked to John today and he's really stressed out. He's been dealing with helping his parents take care of his younger siblings during the day. It might actually be a good idea if he spoke to the guidance counselor a little bit."
+  },
+  {
+    "start_minutes": 1.23,
+    "end_minutes": 1.52,
+    "speaker": "B",
+    "text": "I can talk to John today if you want to send him to my office after you meet with him. It's a lot to deal with for a middle schooler. Great, thanks. And I can help out with the family's childcare needs. I'll look for some free or low cost resources in the community to share with John and he can share them with his family."
+  },
+  {
+    "start_minutes": 1.52,
+    "end_minutes": 1.62,
+    "speaker": "A",
+    "text": "Great. Well, some really good ideas here today. Thanks for coming. And if no one has anything else, I think we can wrap up."
+  }
+]
+    return transcript
+
 def save_tasks_to_json(tasks, output_file='todo_list.json'):
     """
     Save tasks to a JSON file with standardized format
@@ -485,4 +561,48 @@ def process_audio_tasks(audio_file_path: str):
         else:
             return {"tasks": tasks, "message": "Failed to save tasks to JSON file"}
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.post("/upload-video")
+async def upload_video(mode: int, file: UploadFile = File(...)):
+    try:
+        # Save the uploaded file
+        file_location = f"videos/{file.filename}"
+        with open(file_location, "wb") as f:
+            f.write(file.file.read())
+        
+        # Process the video file as needed
+        # For now, just print a message
+        transcript = get_transcript_text(file_location, mode)
+        collection = db['transcripts']
+        meeting_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        collection.insert_one({"segments": transcript, "meeting_id": meeting_id})
+        utterances_info = [
+            {
+                "speaker": u['speaker'],
+                "text": u['text'],
+                "start": u['start_minutes'],
+                "end": u['end_minutes']
+            } for u in transcript
+        ]
+        # print(utterances_info)  
+        event_list = []
+        for req in transcript:
+            response = knowledge_extraction(text=req['text'], speaker=req['speaker'])
+            event_list.extend(response.events)
+        events_dicts = [event.dict() for event in event_list]
+        collection = db['events']
+        collection.insert_many(events_dicts)
+
+        extractor = TaskExtractor(GEMINI_API_KEY)
+        tasks_list = extractor.process_transcript(utterances_info)
+        collection = db['todos']
+        print("Tasks: ", tasks_list)
+        collection.insert_many(tasks_list)
+
+
+ 
+    except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
